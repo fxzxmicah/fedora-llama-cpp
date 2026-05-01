@@ -3,9 +3,8 @@
 %global nccl_version 2.30.4
 %global nccl_pkg_revision 1
 %global cuda_series 13-2
-%global cuda_path_series %(echo '%{cuda_series}' | tr '-' '.')
-%global nccl_builddir %{_vpath_builddir}/nccl
-%global llama_builddir %{_vpath_builddir}/llama
+%global cuda_root /usr/local/cuda-%(echo '%{cuda_series}' | tr '-' '.')
+%global cuda_cmake_flags -Xcompiler=-fPIE
 
 Name:           llama-cpp
 Version:        %{llama_build}
@@ -16,6 +15,9 @@ License:        MIT AND BSD-3-Clause AND Apache-2.0
 URL:            https://github.com/ggml-org/llama.cpp
 Source0:        https://github.com/ggml-org/llama.cpp/archive/refs/tags/%{llama_tag}.tar.gz
 Source1:        https://github.com/NVIDIA/nccl/archive/refs/tags/v%{nccl_version}-%{nccl_pkg_revision}.tar.gz
+
+Patch1:         0001-nccl-fix-nvtx-off-build.patch
+Patch2:         0002-llama-cpp-propagate-nccl-link-dir.patch
 
 ExclusiveArch:  x86_64
 
@@ -51,14 +53,16 @@ The package bundles the proprietary CUDA runtime libraries needed by this
 build, except libcuda.so.1, which is provided by the installed NVIDIA driver.
 
 %prep
-%autosetup -n llama.cpp-%{llama_tag} -a 1
+%autosetup -p1 -n llama.cpp-%{llama_tag} -a 1
 
 %build
-%global __cmake_builddir %{nccl_builddir}
-%cmake -S nccl-%{nccl_version}-%{nccl_pkg_revision} \
+pushd nccl-%{nccl_version}-%{nccl_pkg_revision}
+%cmake \
     -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CUDA_FLAGS=%{cuda_cmake_flags} \
     -DCMAKE_INSTALL_PREFIX=%{_builddir}/nccl-prefix \
     -DCMAKE_INSTALL_LIBDIR=%{_lib} \
+    -DCUDAToolkit_ROOT=%{cuda_root} \
     -DNVTX=OFF \
     -DPROFAPI=OFF \
     -DRDMA_CORE=OFF \
@@ -67,15 +71,19 @@ build, except libcuda.so.1, which is provided by the installed NVIDIA driver.
     -DBUILD_NCCL4PY=OFF \
     -DBUILD_NCCL_EP=OFF
 %cmake_build --target nccl
-%cmake_build --target install
+mkdir -p %{_builddir}/nccl-prefix/include %{_builddir}/nccl-prefix/%{_lib}
+cp -a %{_vpath_builddir}/include/nccl*.h %{_builddir}/nccl-prefix/include/
+cp -a %{_vpath_builddir}/lib/libnccl.so* %{_builddir}/nccl-prefix/%{_lib}/
+popd
 
-%global __cmake_builddir %{llama_builddir}
-%cmake -S . \
+%cmake \
     -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CUDA_FLAGS=%{cuda_cmake_flags} \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR=%{_lib} \
     -DCMAKE_INSTALL_RPATH=%{_privlibdir} \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+    -DCUDAToolkit_ROOT=%{cuda_root} \
     -DBUILD_SHARED_LIBS=ON \
     -DLLAMA_BUILD_COMMON=ON \
     -DLLAMA_BUILD_EXAMPLES=OFF \
@@ -113,17 +121,16 @@ build, except libcuda.so.1, which is provided by the installed NVIDIA driver.
 %cmake_build --target llama-cli --target llama-server
 
 %install
-%global __cmake_builddir %{llama_builddir}
 %cmake_install
 
-install -Dpm0755 %{llama_builddir}/bin/llama-cli %{buildroot}%{_bindir}/llama-cli
-install -Dpm0755 %{llama_builddir}/bin/llama-server %{buildroot}%{_bindir}/llama-server
+install -Dpm0755 %{_vpath_builddir}/bin/llama-cli %{buildroot}%{_bindir}/llama-cli
+install -Dpm0755 %{_vpath_builddir}/bin/llama-server %{buildroot}%{_bindir}/llama-server
 
 mkdir -p %{buildroot}%{_privlibdir}
 cp -a %{_builddir}/nccl-prefix/%{_lib}/libnccl.so.* %{buildroot}%{_privlibdir}/
 
 for lib in libcudart.so libcublas.so libcublasLt.so; do
-    matches=$(find /usr/local/cuda-%{cuda_path_series}/targets/x86_64-linux/lib -maxdepth 1 \( -name "$lib.*" -type f -o -name "$lib.*" -type l \))
+    matches=$(find %{cuda_root}/targets/x86_64-linux/lib -maxdepth 1 \( -name "$lib.*" -type f -o -name "$lib.*" -type l \))
     if [ -z "$matches" ]; then
         echo "Could not locate $lib" >&2
         exit 1

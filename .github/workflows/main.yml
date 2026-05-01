@@ -21,16 +21,16 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/cuda-fedora43.repo
+          dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora${{ github.ref_name }}/x86_64/cuda-fedora${{ github.ref_name }}.repo
           dnf install -y rpmdevtools
 
-      - name: Build & Sign RPM Packages
+      - name: Build Packages
         run: |
           dnf builddep -y SPECS/*.spec
-          spectool --get-files --sourcedir SPECS/*.spec
-          rpmbuild -ba SPECS/*.spec
+          spectool --define "_topdir ${GITHUB_WORKSPACE}" --get-files --sourcedir SPECS/*.spec
+          rpmbuild --define "_topdir ${GITHUB_WORKSPACE}" -ba SPECS/*.spec
 
-      - name: Check and Prepare Release
+      - name: Prepare Release
         id: vars
         run: |
           echo "version=$(rpmspec -q --qf '%{VERSION}-%{RELEASE}\n' SPECS/*.spec | head -n 1)" >> $GITHUB_OUTPUT

@@ -1,0 +1,100 @@
+diff --git a/nccl-2.30.4-1/CMakeLists.txt b/nccl-2.30.4-1/CMakeLists.txt
+index 3c62b82..e76cc57 100644
+--- a/nccl-2.30.4-1/CMakeLists.txt
++++ b/nccl-2.30.4-1/CMakeLists.txt
+@@ -21,6 +21,14 @@ add_compile_definitions(
+ 
+ set(ENV{NCCL_USE_CMAKE} "1")
+ 
++if(NOT DEFINED CMAKE_CUDA_COMPILER AND NOT DEFINED ENV{CUDACXX})
++    if(DEFINED CUDAToolkit_ROOT AND NOT "${CUDAToolkit_ROOT}" STREQUAL "")
++        set(ENV{PATH} "${CUDAToolkit_ROOT}/bin:$ENV{PATH}")
++    elseif(DEFINED ENV{CUDAToolkit_ROOT} AND NOT "$ENV{CUDAToolkit_ROOT}" STREQUAL "")
++        set(ENV{PATH} "$ENV{CUDAToolkit_ROOT}/bin:$ENV{PATH}")
++    endif()
++endif()
++
+ project(NCCL VERSION ${NCCL_MAJOR}.${NCCL_MINOR}.${NCCL_PATCH}
+         LANGUAGES CUDA CXX C)
+ 
+diff --git a/nccl-2.30.4-1/src/include/nvtx.h b/nccl-2.30.4-1/src/include/nvtx.h
+index cafaf12..e4ac893 100644
+--- a/nccl-2.30.4-1/src/include/nvtx.h
++++ b/nccl-2.30.4-1/src/include/nvtx.h
+@@ -8,6 +8,16 @@
+ #ifndef NCCL_NVTX_H_
+ #define NCCL_NVTX_H_
+ 
++#ifdef NVTX_DISABLE
++
++#define NVTX3_PAYLOAD(...)
++#define NVTX3_FUNC_WITH_PARAMS(N, T, P)
++#define NCCL_NVTX3_FUNC_RANGE
++#define NVTX3_RANGE(T)
++#define NVTX3_RANGE_ADD_PAYLOAD(N, S, P) do { } while (0)
++
++#else
++
+ #include "nvtx3/nvtx3.hpp"
+ 
+ #include "param.h"
+@@ -217,3 +227,5 @@ class ncclOptionalNvtxPayloadRange {
+ extern void initNvtxRegisteredEnums();
+ 
+ #endif
++
++#endif
+diff --git a/nccl-2.30.4-1/src/include/nvtx_payload_schemas.h b/nccl-2.30.4-1/src/include/nvtx_payload_schemas.h
+index e58919c..842c96d 100644
+--- a/nccl-2.30.4-1/src/include/nvtx_payload_schemas.h
++++ b/nccl-2.30.4-1/src/include/nvtx_payload_schemas.h
+@@ -11,6 +11,9 @@
+ #ifndef NVTX_PAYLOAD_SCHEMAS_H_
+ #define NVTX_PAYLOAD_SCHEMAS_H_
+ 
++#ifdef NVTX_DISABLE
++
++#else
+ 
+ #include "nccl.h"
+ #include "nvtx3/nvToolsExtPayload.h"
+@@ -192,4 +195,6 @@ NCCL_NVTX_DEFINE_STRUCT_WITH_SCHEMA_ENTRIES(NcclNvtxParamsWaitSignal, static con
+   )
+ )
+ 
++#endif
++
+ #endif // end include guard
+diff --git a/nccl-2.30.4-1/src/init.cc b/nccl-2.30.4-1/src/init.cc
+index a2f9b86..752c2eb 100644
+--- a/nccl-2.30.4-1/src/init.cc
++++ b/nccl-2.30.4-1/src/init.cc
+@@ -148,7 +148,9 @@ static void initOnceFunc() {
+   // Always initialize bootstrap network
+   NCCLCHECKGOTO(bootstrapNetInit(), initResult, exit);
+ 
++#ifndef NVTX_DISABLE
+   initNvtxRegisteredEnums();
++#endif
+ exit:;
+ }
+ 
+@@ -3314,4 +3316,3 @@ ncclResult_t ncclCommUserRank(const ncclComm_t comm, int* rank) {
+   *rank = comm->rank;
+   return ncclSuccess;
+ }
+-
+diff --git a/nccl-2.30.4-1/src/proxy.cc b/nccl-2.30.4-1/src/proxy.cc
+index 668f58d..c94c659 100644
+--- a/nccl-2.30.4-1/src/proxy.cc
++++ b/nccl-2.30.4-1/src/proxy.cc
+@@ -957,7 +957,9 @@ void* ncclProxyProgress(void *proxyState_) {
+   ncclLastProxyState = state;
+   char threadName[NCCL_THREAD_NAMELEN];
+   snprintf(threadName, NCCL_THREAD_NAMELEN, "NCCL Progress%2d", proxyState->cudaDev);
++#ifndef NVTX_DISABLE
+   nvtxNameOsThreadA(ncclOsGetTid(), threadName);
++#endif
+ 
+   int lastIdle = 0;
+   /* Too frequent call of ncclProxyGetPostedOps() will result in perf regression for small message
