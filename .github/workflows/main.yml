@@ -19,10 +19,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Restore Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: ccache-${{ github.ref_name }}
+
+      - name: Install Tools
         run: |
           dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora${{ github.ref_name }}/x86_64/cuda-fedora${{ github.ref_name }}.repo
-          dnf install -y rpmdevtools
+          dnf install -y rpmdevtools ccache
 
       - name: Build Packages
         run: |
@@ -40,3 +47,10 @@ jobs:
         with:
           tag_name: ${{ steps.vars.outputs.version }}
           files: RPMS/*/*
+
+      - name: Save Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ github.ref_name }}-${{ github.sha }}
