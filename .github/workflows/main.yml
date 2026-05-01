@@ -1,0 +1,42 @@
+name: Build RPM & Release
+
+on:
+  push:
+    paths:
+      - 'SPECS/**'
+      - 'SOURCES/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  job:
+    runs-on: ubuntu-latest
+    container: fedora:${{ github.ref_name }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/cuda-fedora43.repo
+          dnf install -y rpmdevtools
+
+      - name: Build & Sign RPM Packages
+        run: |
+          dnf builddep -y SPECS/*.spec
+          spectool --get-files --sourcedir SPECS/*.spec
+          rpmbuild -ba SPECS/*.spec
+
+      - name: Check and Prepare Release
+        id: vars
+        run: |
+          echo "version=$(rpmspec -q --qf '%{VERSION}-%{RELEASE}\n' SPECS/*.spec | head -n 1)" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.version }}
+          files: RPMS/*/*
