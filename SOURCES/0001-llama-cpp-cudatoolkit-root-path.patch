@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cuda/CMakeLists.txt b/ggml/src/ggml-cuda/CMakeLists.txt
-index b54d4a6..51a5854 100644
+index b54d4a6..739a724 100644
 --- a/ggml/src/ggml-cuda/CMakeLists.txt
 +++ b/ggml/src/ggml-cuda/CMakeLists.txt
 @@ -55,6 +55,14 @@ if (CUDAToolkit_FOUND)
@@ -17,14 +17,3 @@ index b54d4a6..51a5854 100644
      enable_language(CUDA)
  
      # TODO: Remove once CCCL 3.2 has been released and bundled with CUDA Toolkit
-@@ -184,7 +192,10 @@ if (CUDAToolkit_FOUND)
-     if (GGML_CUDA_NCCL)
-         find_package(NCCL)
-         if (NCCL_FOUND)
-+            get_filename_component(NCCL_LIBRARY_DIR "${NCCL_LIBRARY}" DIRECTORY)
-             add_compile_definitions(GGML_USE_NCCL)
-+            target_link_directories(ggml-cuda PUBLIC "${NCCL_LIBRARY_DIR}")
-+            target_link_options(ggml-cuda INTERFACE "LINKER:-rpath-link,${NCCL_LIBRARY_DIR}")
-             target_link_libraries(ggml-cuda PRIVATE NCCL::NCCL)
-         else()
-             message(STATUS "Warning: NCCL not found, performance for multiple CUDA GPUs will be suboptimal")
