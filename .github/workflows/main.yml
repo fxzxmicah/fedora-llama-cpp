@@ -19,8 +19,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Restore Cache
-        uses: actions/cache/restore@v4
+      - name: Maintain Cache
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
           key: ccache-${{ github.ref_name }}-${{ github.sha }}
@@ -28,29 +28,66 @@ jobs:
 
       - name: Install Tools
         run: |
-          dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora${{ github.ref_name }}/x86_64/cuda-fedora${{ github.ref_name }}.repo
-          dnf install -y rpmdevtools ccache
+          rm /etc/yum.repos.d/fedora-cisco-openh264.repo
+          dnf install -y rpmdevtools ccache createrepo_c
 
-      - name: Build Packages
+      - name: Create Local Repo
+        run : |
+          mkdir -p RPMS
+          createrepo RPMS
+          tee /etc/yum.repos.d/local-rpm.repo <<EOF
+          [local-rpm]
+          name=Local RPM Repository
+          baseurl=file://${GITHUB_WORKSPACE}/RPMS
+          enabled=1
+          gpgcheck=0
+          EOF
+
+      - name: Download RPM
         run: |
-          dnf builddep -y SPECS/*.spec
-          spectool --define "_topdir ${GITHUB_WORKSPACE}" --get-files --sourcedir SPECS/*.spec
-          rpmbuild --define "_topdir ${GITHUB_WORKSPACE}" -ba SPECS/*.spec
+          build=()
+          while read -r package; do
+            while read -r filename arch; do
+              mkdir -p "RPMS/${arch}"
+              if ! curl -fL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o "RPMS/${arch}/${filename}" "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/${filename}"; then
+                build+=("${package}")
+                break
+              fi
+            done < <(rpmspec -q --builtrpms --queryformat "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}.rpm %{ARCH}\n" "SPECS/${package}.spec")
+          done < SPECS/DEPS
+          createrepo --update RPMS
+          if [ ${#build[@]} -ne 0 ]; then
+            echo "::notice::Build: ${build[@]}"
+            echo "build=${build[@]}" >> ${GITHUB_ENV}
+          fi
 
       - name: Prepare Release
         id: vars
         run: |
-          echo "version=$(rpmspec -q --qf '%{VERSION}-%{RELEASE}\n' SPECS/*.spec | head -n 1)" >> $GITHUB_OUTPUT
+          echo "version=$(rpmspec -q --queryformat "%{VERSION}-%{RELEASE}\n" SPECS/llama-cpp.spec | head -n1)" >> ${GITHUB_OUTPUT}
+
+      - name: Build Dep RPM
+        if: env.build
+        run: |
+          dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora${{ github.ref_name }}/x86_64/cuda-fedora${{ github.ref_name }}.repo
+          for package in ${build}; do
+            dnf --refresh builddep -y SPECS/${package}.spec
+            spectool --define "_topdir ${GITHUB_WORKSPACE}" --sourcedir --get-files SPECS/${package}.spec
+            rpmbuild --define "_topdir ${GITHUB_WORKSPACE}" -bb SPECS/${package}.spec
+            createrepo --update RPMS
+          done
+          dnf remove -y --installed-from-repo="*cuda*" "*"
+          rm /etc/yum.repos.d/*cuda*.repo
+
+      - name: Build RPM
+        run: |
+          dnf --refresh builddep -y SPECS/llama-cpp.spec
+          spectool --define "_topdir ${GITHUB_WORKSPACE}" --sourcedir --get-files SPECS/llama-cpp.spec
+          rpmbuild --define "_topdir ${GITHUB_WORKSPACE}" -bb SPECS/llama-cpp.spec
 
       - name: Create Release
+        if: always()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.vars.outputs.version }}
-          files: RPMS/*/*
-
-      - name: Save Cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ccache
-          key: ccache-${{ github.ref_name }}-${{ github.sha }}
+          files: RPMS/*/*.rpm

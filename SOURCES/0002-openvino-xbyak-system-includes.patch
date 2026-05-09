@@ -1,0 +1,33 @@
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index 23e40625..285d0173 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -50,7 +50,10 @@ target_include_directories(openvino_core_dev INTERFACE
+     $<BUILD_INTERFACE:${OpenVINO_SOURCE_DIR}/src/common/transformations/include>
+     $<BUILD_INTERFACE:${OpenVINO_SOURCE_DIR}/src/common/low_precision_transformations/include>)
+ 
+-target_include_directories(openvino_core_dev SYSTEM INTERFACE
++# Some system xbyak packages export /usr/include as an include directory.
++# Propagating it as a SYSTEM include breaks libstdc++ header chaining such as
++# cstdlib -> include_next <stdlib.h>, so keep xbyak as a normal include.
++target_include_directories(openvino_core_dev INTERFACE
+     $<BUILD_INTERFACE:$<$<TARGET_EXISTS:xbyak::xbyak>:$<TARGET_PROPERTY:xbyak::xbyak,INTERFACE_INCLUDE_DIRECTORIES>>>)
+ 
+ target_link_libraries(openvino_core_dev INTERFACE openvino::itt openvino::util)
+diff --git a/src/inference/CMakeLists.txt b/src/inference/CMakeLists.txt
+index 90d6a4b6..fb8ee7c3 100644
+--- a/src/inference/CMakeLists.txt
++++ b/src/inference/CMakeLists.txt
+@@ -77,10 +77,10 @@ if(ENABLE_DEBUG_CAPS)
+ endif()
+ 
+ target_include_directories(${TARGET_NAME}_obj SYSTEM PRIVATE
+-    $<TARGET_PROPERTY:openvino::pugixml,INTERFACE_INCLUDE_DIRECTORIES>
+-    $<$<TARGET_EXISTS:xbyak::xbyak>:$<TARGET_PROPERTY:xbyak::xbyak,INTERFACE_INCLUDE_DIRECTORIES>>)
++    $<TARGET_PROPERTY:openvino::pugixml,INTERFACE_INCLUDE_DIRECTORIES>)
+ 
+ target_include_directories(${TARGET_NAME}_obj PRIVATE
++    $<$<TARGET_EXISTS:xbyak::xbyak>:$<TARGET_PROPERTY:xbyak::xbyak,INTERFACE_INCLUDE_DIRECTORIES>>
+     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+     $<TARGET_PROPERTY:openvino::runtime::dev,INTERFACE_INCLUDE_DIRECTORIES>
+     $<$<TARGET_EXISTS:openvino_proxy_plugin_obj>:$<TARGET_PROPERTY:openvino_proxy_plugin_obj,INTERFACE_INCLUDE_DIRECTORIES>>

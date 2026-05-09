@@ -1,0 +1,16 @@
+diff --git a/ggml/src/ggml-openvino/CMakeLists.txt b/ggml/src/ggml-openvino/CMakeLists.txt
+index 175b585..198da42 100644
+--- a/ggml/src/ggml-openvino/CMakeLists.txt
++++ b/ggml/src/ggml-openvino/CMakeLists.txt
+@@ -1,7 +1,10 @@
+ find_package(OpenVINO REQUIRED)
+ find_package(OpenCL REQUIRED)
+ 
+-include("${OpenVINO_DIR}/../3rdparty/tbb/lib/cmake/TBB/TBBConfig.cmake")
++find_package(TBB COMPONENTS tbb QUIET)
++if(NOT TBB_FOUND)
++    include("${OpenVINO_DIR}/../3rdparty/tbb/lib/cmake/TBB/TBBConfig.cmake")
++endif()
+ 
+ file(GLOB_RECURSE GGML_HEADERS_OPENVINO "*.h" "*.hpp")
+ file(GLOB_RECURSE GGML_SOURCES_OPENVINO "*.cpp")
