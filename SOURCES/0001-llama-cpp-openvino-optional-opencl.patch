@@ -1,0 +1,596 @@
+diff --git a/ggml/src/ggml-openvino/CMakeLists.txt b/ggml/src/ggml-openvino/CMakeLists.txt
+index 175b585..67ccfac 100644
+--- a/ggml/src/ggml-openvino/CMakeLists.txt
++++ b/ggml/src/ggml-openvino/CMakeLists.txt
+@@ -1,7 +1,10 @@
+ find_package(OpenVINO REQUIRED)
+-find_package(OpenCL REQUIRED)
++include(CheckIncludeFileCXX)
+ 
+-include("${OpenVINO_DIR}/../3rdparty/tbb/lib/cmake/TBB/TBBConfig.cmake")
++find_package(TBB COMPONENTS tbb QUIET)
++if(NOT TBB_FOUND)
++    include("${OpenVINO_DIR}/../3rdparty/tbb/lib/cmake/TBB/TBBConfig.cmake")
++endif()
+ 
+ file(GLOB_RECURSE GGML_HEADERS_OPENVINO "*.h" "*.hpp")
+ file(GLOB_RECURSE GGML_SOURCES_OPENVINO "*.cpp")
+@@ -11,7 +14,20 @@ ggml_add_backend_library(ggml-openvino
+     ${GGML_HEADERS_OPENVINO}
+ )
+ 
+-target_link_libraries(ggml-openvino PRIVATE openvino::runtime TBB::tbb OpenCL::OpenCL)
++target_link_libraries(ggml-openvino PRIVATE openvino::runtime TBB::tbb)
++
++get_target_property(GGML_OPENVINO_RUNTIME_INCLUDE_DIRS openvino::runtime INTERFACE_INCLUDE_DIRECTORIES)
++set(GGML_OPENVINO_PREV_CMAKE_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES}")
++set(CMAKE_REQUIRED_INCLUDES ${GGML_OPENVINO_RUNTIME_INCLUDE_DIRS})
++check_include_file_cxx("openvino/runtime/intel_gpu/ocl/ocl.hpp" GGML_OPENVINO_HAVE_INTEL_GPU_OCL_HPP)
++set(CMAKE_REQUIRED_INCLUDES "${GGML_OPENVINO_PREV_CMAKE_REQUIRED_INCLUDES}")
++unset(GGML_OPENVINO_PREV_CMAKE_REQUIRED_INCLUDES)
++unset(GGML_OPENVINO_RUNTIME_INCLUDE_DIRS)
++
++if(TARGET OpenCL::OpenCL AND GGML_OPENVINO_HAVE_INTEL_GPU_OCL_HPP)
++    target_compile_definitions(ggml-openvino PRIVATE GGML_OPENVINO_USE_OPENCL)
++    target_link_libraries(ggml-openvino PRIVATE OpenCL::OpenCL)
++endif()
+ 
+ if (GGML_OPENVINO)
+     if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+diff --git a/ggml/src/ggml-openvino/ggml-openvino-extra.cpp b/ggml/src/ggml-openvino/ggml-openvino-extra.cpp
+index 4140136..0e30de1 100644
+--- a/ggml/src/ggml-openvino/ggml-openvino-extra.cpp
++++ b/ggml/src/ggml-openvino/ggml-openvino-extra.cpp
+@@ -4,7 +4,9 @@
+ #include "ggml.h"
+ 
+ #include <cstring>
++#ifdef GGML_OPENVINO_USE_OPENCL
+ #include <openvino/runtime/intel_gpu/ocl/ocl.hpp>
++#endif
+ #include <openvino/runtime/intel_npu/level_zero/level_zero.hpp>
+ #include <openvino/runtime/properties.hpp>
+ #include <optional>
+@@ -52,7 +54,8 @@ void ggml_openvino_device_config::init() {
+         compile_config.insert(ov::cache_mode(ov::CacheMode::OPTIMIZE_SIZE));
+     }
+ 
+-    // Initialize remote context with queue sharing for GPU
++    // Initialize remote context with queue sharing for GPU when OpenCL interop is available.
++#ifdef GGML_OPENVINO_USE_OPENCL
+     if (device_name == "GPU") {
+         // Create OpenCL context and queue
+         cl_int err;
+@@ -92,15 +95,18 @@ void ggml_openvino_device_config::init() {
+         // remote tensor is not used for NPU yet
+         // remote_context = ov_singleton_core().get_default_context(device_name);
+     }
++#endif
+ 
+     initialized = true;
+ }
+ 
+ ggml_openvino_device_config::~ggml_openvino_device_config() {
++#ifdef GGML_OPENVINO_USE_OPENCL
+     if (cl_queue != nullptr) {
+         clReleaseCommandQueue(cl_queue);
+         cl_queue = nullptr;
+     }
++#endif
+ }
+ 
+ // Get the global device config singleton
+@@ -134,6 +140,7 @@ const ov::AnyMap & ggml_openvino_get_compile_config() {
+     return ggml_openvino_get_device_config().compile_config;
+ }
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
+ // Get the OpenCL command queue for GPU operations
+ cl_command_queue ggml_openvino_get_cl_queue() {
+     return ggml_openvino_get_device_config().cl_queue;
+@@ -166,6 +173,7 @@ clEnqueueMemcpyINTEL_fn ggml_openvino_get_clEnqueueMemcpyINTEL() {
+     }
+     return fn;
+ }
++#endif
+ 
+ // Get requantization type for a tensor type (returns nullopt if no requant needed)
+ std::optional<ExtraQuantType> ggml_openvino_get_requant_type(const ggml_tensor * tensor, bool no_requant) {
+@@ -335,7 +343,11 @@ ggml_openvino_extracted_layout ggml_openvino_get_extracted_layout(const ggml_ten
+     return layout;
+ }
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
+ ggml_openvino_tensor_extra * ggml_openvino_create_tensor_extra(const ggml_tensor * tensor, bool is_remote) {
++#else
++ggml_openvino_tensor_extra * ggml_openvino_create_tensor_extra(const ggml_tensor * tensor) {
++#endif
+     ov::Shape shape;
+     for (int i = GGML_MAX_DIMS - 1; i >= 0; --i) {
+         shape.push_back(static_cast<size_t>(tensor->ne[i]));
+@@ -363,16 +375,19 @@ ggml_openvino_tensor_extra * ggml_openvino_create_tensor_extra(const ggml_tensor
+         return nullptr;
+     }
+ 
+-    const auto & device_name = ggml_openvino_get_device_name();
+-    auto remote_context = ggml_openvino_get_remote_context();
+-
+     std::shared_ptr<ov::Tensor> ov_tensor;
++#ifdef GGML_OPENVINO_USE_OPENCL
+     if (is_remote) {
++        const auto & device_name = ggml_openvino_get_device_name();
++        auto remote_context = ggml_openvino_get_remote_context();
+         GGML_ASSERT(device_name == "GPU");
+         auto gpu_context = remote_context->as<ov::intel_gpu::ocl::ClContext>();
+         auto usm_tensor = gpu_context.create_tensor(element_type, shape, tensor->data);
+         ov_tensor = std::make_shared<ov::intel_gpu::ocl::USMTensor>(std::move(usm_tensor));
+     } else {
++#else
++    {
++#endif
+         ov_tensor = std::make_shared<ov::Tensor>(element_type, shape, tensor->data);
+     }
+ 
+diff --git a/ggml/src/ggml-openvino/ggml-openvino-extra.h b/ggml/src/ggml-openvino/ggml-openvino-extra.h
+index cd0baf4..3a2cbbb 100644
+--- a/ggml/src/ggml-openvino/ggml-openvino-extra.h
++++ b/ggml/src/ggml-openvino/ggml-openvino-extra.h
+@@ -3,9 +3,6 @@
+ #include "ggml.h"
+ #include "openvino/runtime/core.hpp"
+ 
+-#define CL_TARGET_OPENCL_VERSION 300
+-#include <CL/cl.h>
+-
+ #include <cstdlib>
+ #include <memory>
+ #include <openvino/core/node.hpp>
+@@ -14,6 +11,11 @@
+ #include <optional>
+ #include <string>
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
++#define CL_TARGET_OPENCL_VERSION 300
++#include <CL/cl.h>
++#endif
++
+ // ExtraQuantType enum - defines requantization target formats
+ enum class ExtraQuantType { F16, Q4_0_C, Q8_1_C, Q4_0_128, Q8_0_C, Q8_0_32 };
+ 
+@@ -25,6 +27,7 @@ std::optional<ov::RemoteContext> ggml_openvino_get_remote_context();
+ // Get the compile config for the current device
+ const ov::AnyMap & ggml_openvino_get_compile_config();
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
+ // Get the OpenCL command queue for GPU operations (returns nullptr for CPU/NPU)
+ cl_command_queue ggml_openvino_get_cl_queue();
+ 
+@@ -52,6 +55,7 @@ clEnqueueMemFillINTEL_fn ggml_openvino_get_clEnqueueMemFillINTEL();
+ 
+ // Get the clEnqueueMemcpyINTEL function pointer (returns nullptr if not available)
+ clEnqueueMemcpyINTEL_fn ggml_openvino_get_clEnqueueMemcpyINTEL();
++#endif
+ 
+ // =====================================================
+ // Global Device Configuration (singleton)
+@@ -64,7 +68,9 @@ struct ggml_openvino_device_config {
+     bool initialized = false;
+     std::optional<ov::RemoteContext> remote_context;
+     ov::AnyMap compile_config;
++#ifdef GGML_OPENVINO_USE_OPENCL
+     cl_command_queue cl_queue = nullptr;
++#endif
+ 
+     void init();
+     ~ggml_openvino_device_config();
+@@ -162,7 +168,11 @@ struct ggml_openvino_extracted_layout {
+ // Calculate the buffer layout for extracted quantized data
+ ggml_openvino_extracted_layout ggml_openvino_get_extracted_layout(const ggml_tensor * tensor, bool use_bias = false);
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
+ ggml_openvino_tensor_extra * ggml_openvino_create_tensor_extra(const ggml_tensor * tensor, bool is_remote);
++#else
++ggml_openvino_tensor_extra * ggml_openvino_create_tensor_extra(const ggml_tensor * tensor);
++#endif
+ 
+ // Register an extra with the tensor's OpenVINO buffer context for proper lifetime management.
+ // This sets tensor->extra and tracks the extra in the buffer context for cleanup.
+diff --git a/ggml/src/ggml-openvino/ggml-openvino.cpp b/ggml/src/ggml-openvino/ggml-openvino.cpp
+index 4f3ebf2..aa0d3d4 100644
+--- a/ggml/src/ggml-openvino/ggml-openvino.cpp
++++ b/ggml/src/ggml-openvino/ggml-openvino.cpp
+@@ -17,7 +17,9 @@
+ #include <openvino/core/type/element_type.hpp>
+ #include <openvino/openvino.hpp>
+ #include <openvino/runtime/allocator.hpp>
++#ifdef GGML_OPENVINO_USE_OPENCL
+ #include <openvino/runtime/intel_gpu/ocl/ocl.hpp>
++#endif
+ #include <openvino/runtime/intel_npu/level_zero/level_zero.hpp>
+ #include <openvino/runtime/tensor.hpp>
+ #include <set>
+@@ -60,7 +62,9 @@ struct ggml_backend_openvino_buffer_context {
+     // For non-weight buffers (KV cache, compute), we still use contiguous allocation
+     void * data;
+     size_t size;
++#ifdef GGML_OPENVINO_USE_OPENCL
+     bool is_remote;
++#endif
+ 
+     // Wrapping of the buffer
+     std::shared_ptr<ov::Tensor> ov_buffer;
+@@ -68,9 +72,8 @@ struct ggml_backend_openvino_buffer_context {
+     // Track all extras for cleanup
+     std::map<ggml_tensor *, ggml_openvino_extra_base *> tensor_extras;
+ 
+-    // Used for re-allocation on device for kvcache
+-    void * data_prev;
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
+     ggml_backend_openvino_buffer_context(int device, size_t size, bool is_remote = false) :
+         device(device),
+         name(std::string(GGML_OPENVINO_NAME) + std::to_string(device)),
+@@ -81,12 +84,24 @@ struct ggml_backend_openvino_buffer_context {
+         data(nullptr),
+         size(size),
+         is_remote(is_remote) {
++#else
++    ggml_backend_openvino_buffer_context(int device, size_t size) :
++        device(device),
++        name(std::string(GGML_OPENVINO_NAME) + std::to_string(device)),
++        id([]() {
++            static std::atomic<size_t> next_id{1};
++            return next_id.fetch_add(1);
++        }()),
++        data(nullptr),
++        size(size) {
++#endif
+         if (size == 0) {
+             return;
+         }
+ 
+         const auto & device_name = ggml_openvino_get_device_name();
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
+         if (is_remote) {
+             GGML_ASSERT(device_name == "GPU");
+             auto remote_context = ggml_openvino_get_remote_context();
+@@ -96,6 +111,9 @@ struct ggml_backend_openvino_buffer_context {
+             data = usm_tensor.get();
+             ov_buffer = std::make_shared<ov::intel_gpu::ocl::USMTensor>(std::move(usm_tensor));
+         } else {
++#else
++        {
++#endif
+             data = ggml_aligned_malloc(size);
+             GGML_ASSERT(data);
+             memset(data, 0, size);
+@@ -122,7 +140,11 @@ struct ggml_backend_openvino_buffer_context {
+             delete pair.second;
+         }
+         tensor_extras.clear();
++#ifdef GGML_OPENVINO_USE_OPENCL
+         if (!is_remote && data != nullptr) {
++#else
++        if (data != nullptr) {
++#endif
+             ggml_aligned_free(data, size);
+         }
+     }
+@@ -154,7 +176,8 @@ static enum ggml_status ggml_backend_openvino_buffer_init_tensor(ggml_backend_bu
+     // GGML_LOG_DEBUG("%s: buffer usage=%d, tensor name=%s\n", __func__, buffer->usage, tensor->name);
+     ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+ 
+-    // Put kvcache on device memory for GPU (NPU memory is too small even for kvcache)
++    // Put kvcache on device memory for GPU when OpenCL interop is available.
++#ifdef GGML_OPENVINO_USE_OPENCL
+     if (strncmp(tensor->name, "cache_", 6) == 0 && !ctx->is_remote && ggml_openvino_get_device_name() == "GPU" &&
+         !is_stateful_enabled()) {
+         GGML_ASSERT(ctx->tensor_extras.empty());
+@@ -166,6 +189,7 @@ static enum ggml_status ggml_backend_openvino_buffer_init_tensor(ggml_backend_bu
+         buffer->context = ctx;
+         tensor->data = (char *) ctx->data + ((char *) tensor->data - (char *) data_prev);
+     }
++#endif
+ 
+     // Views share the extra from view_src
+     if (tensor->view_src != nullptr) {
+@@ -179,7 +203,11 @@ static enum ggml_status ggml_backend_openvino_buffer_init_tensor(ggml_backend_bu
+     ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+ 
+     if (tensor->data != nullptr && !ggml_is_quantized(tensor->type)) {
++#ifdef GGML_OPENVINO_USE_OPENCL
+         ggml_openvino_tensor_extra * extra = ggml_openvino_create_tensor_extra(tensor, ctx->is_remote);
++#else
++        ggml_openvino_tensor_extra * extra = ggml_openvino_create_tensor_extra(tensor);
++#endif
+         if (extra != nullptr) {
+             auto it = ctx->tensor_extras.find(tensor);
+             if (it != ctx->tensor_extras.end()) {
+@@ -200,8 +228,9 @@ static void ggml_backend_openvino_buffer_memset_tensor(ggml_backend_buffer_t buf
+                                                        size_t size) {
+     // GGML_LOG_DEBUG("%s: buffer usage=%d, tensor name=%s\n", __func__, buffer->usage, tensor->name);
+     GGML_ASSERT(tensor != nullptr && tensor->data != nullptr);
+-    ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
++    ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+     if (ctx->is_remote) {
+         // For remote (device) buffers, use OpenCL USM memfill
+         cl_command_queue queue = ggml_openvino_get_cl_queue();
+@@ -218,6 +247,10 @@ static void ggml_backend_openvino_buffer_memset_tensor(ggml_backend_buffer_t buf
+             GGML_LOG_ERROR("%s: no OpenCL queue or clEnqueueMemFillINTEL not available for GPU buffer\n", __func__);
+         }
+     } else {
++#else
++    GGML_UNUSED(buffer);
++    {
++#endif
+         memset((char *) tensor->data + offset, value, size);
+     }
+ }
+@@ -280,6 +313,7 @@ static void ggml_backend_openvino_buffer_set_tensor(ggml_backend_buffer_t buffer
+         }
+     } else {
+         // Non-weight tensor (KV cache, activations, etc.) - copy data. test-backend-ops also goes here
++#ifdef GGML_OPENVINO_USE_OPENCL
+         if (ctx->is_remote) {
+             cl_command_queue queue = ggml_openvino_get_cl_queue();
+             auto mem_cpy_fn = ggml_openvino_get_clEnqueueMemcpyINTEL();
+@@ -293,10 +327,17 @@ static void ggml_backend_openvino_buffer_set_tensor(ggml_backend_buffer_t buffer
+                 GGML_LOG_ERROR("%s: no OpenCL queue or clEnqueueMemcpyINTEL not available for GPU buffer\n", __func__);
+             }
+         } else {
++#else
++        {
++#endif
+             memcpy((char *) tensor->data + offset, data, size);
+         }
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
+         ggml_openvino_tensor_extra * extra = ggml_openvino_create_tensor_extra(tensor, ctx->is_remote);
++#else
++        ggml_openvino_tensor_extra * extra = ggml_openvino_create_tensor_extra(tensor);
++#endif
+         if (extra == nullptr) {
+             // GGML_LOG_ERROR("%s: failed to create tensor extra for %s\n", __func__, tensor->name);
+             return;
+@@ -318,8 +359,9 @@ static void ggml_backend_openvino_buffer_get_tensor(ggml_backend_buffer_t buffer
+                                                     size_t size) {
+     // GGML_LOG_DEBUG("%s: buffer usage=%d, tensor name=%s\n", __func__, buffer->usage, tensor->name);
+     GGML_ASSERT(tensor != nullptr && tensor->data != nullptr);
+-    ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
++    ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+     if (ctx->is_remote) {
+         // For remote (device) buffers, use OpenCL USM memcpy (device-to-host)
+         cl_command_queue queue = ggml_openvino_get_cl_queue();
+@@ -334,6 +376,10 @@ static void ggml_backend_openvino_buffer_get_tensor(ggml_backend_buffer_t buffer
+             GGML_LOG_ERROR("%s: no OpenCL queue or clEnqueueMemcpyINTEL not available for GPU buffer\n", __func__);
+         }
+     } else {
++#else
++    GGML_UNUSED(buffer);
++    {
++#endif
+         memcpy(data, (const char *) tensor->data + offset, size);
+     }
+ }
+@@ -343,8 +389,9 @@ static bool ggml_backend_openvino_buffer_cpy_tensor(ggml_backend_buffer_t buffer
+                                                     ggml_tensor * dst) {
+     // GGML_LOG_DEBUG("%s: src tensor name=%s, dst tensor name=%s\n", __func__, src->name, dst->name);
+     GGML_ASSERT(src != nullptr && dst != nullptr);
+-    ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+ 
++#ifdef GGML_OPENVINO_USE_OPENCL
++    ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+     if (ctx->is_remote) {
+         // For remote (device) buffers, use OpenCL USM memcpy
+         cl_command_queue queue = ggml_openvino_get_cl_queue();
+@@ -379,6 +426,9 @@ static bool ggml_backend_openvino_buffer_cpy_tensor(ggml_backend_buffer_t buffer
+         }
+         return false;
+     }
++#else
++    GGML_UNUSED(buffer);
++#endif
+ 
+     // Host buffer - can copy from any host buffer
+     if (ggml_backend_buffer_is_host(src->buffer)) {
+@@ -391,6 +441,7 @@ static bool ggml_backend_openvino_buffer_cpy_tensor(ggml_backend_buffer_t buffer
+ static void ggml_backend_openvino_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
+     ggml_backend_openvino_buffer_context * ctx = (ggml_backend_openvino_buffer_context *) buffer->context;
+     GGML_ASSERT(ctx->data != nullptr);
++#ifdef GGML_OPENVINO_USE_OPENCL
+     if (ctx->is_remote) {
+         cl_command_queue queue = ggml_openvino_get_cl_queue();
+         auto mem_fill_fn = ggml_openvino_get_clEnqueueMemFillINTEL();
+@@ -406,6 +457,9 @@ static void ggml_backend_openvino_buffer_clear(ggml_backend_buffer_t buffer, uin
+                           __func__);
+         }
+     } else {
++#else
++    {
++#endif
+         memset(ctx->data, value, ctx->size);
+     }
+ }
+diff --git a/tools/batched-bench/CMakeLists.txt b/tools/batched-bench/CMakeLists.txt
+index f6ed257..19c3a45 100644
+--- a/tools/batched-bench/CMakeLists.txt
++++ b/tools/batched-bench/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-batched-bench-impl)
+ 
+-add_library(${TARGET} batched-bench.cpp)
++add_library(${TARGET} STATIC batched-bench.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-batched-bench executable
+ 
+ set(TARGET llama-batched-bench)
+diff --git a/tools/cli/CMakeLists.txt b/tools/cli/CMakeLists.txt
+index a3e6357..0142cd6 100644
+--- a/tools/cli/CMakeLists.txt
++++ b/tools/cli/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-cli-impl)
+ 
+-add_library(${TARGET} cli.cpp)
++add_library(${TARGET} STATIC cli.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ../server)
+ target_link_libraries(${TARGET} PUBLIC server-context llama-common ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-cli executable
+ 
+ set(TARGET llama-cli)
+diff --git a/tools/completion/CMakeLists.txt b/tools/completion/CMakeLists.txt
+index a310251..392e844 100644
+--- a/tools/completion/CMakeLists.txt
++++ b/tools/completion/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-completion-impl)
+ 
+-add_library(${TARGET} completion.cpp)
++add_library(${TARGET} STATIC completion.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-completion executable
+ 
+ set(TARGET llama-completion)
+diff --git a/tools/fit-params/CMakeLists.txt b/tools/fit-params/CMakeLists.txt
+index 8acdaef..91a861b 100644
+--- a/tools/fit-params/CMakeLists.txt
++++ b/tools/fit-params/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-fit-params-impl)
+ 
+-add_library(${TARGET} fit-params.cpp)
++add_library(${TARGET} STATIC fit-params.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-fit-params executable
+ 
+ set(TARGET llama-fit-params)
+diff --git a/tools/llama-bench/CMakeLists.txt b/tools/llama-bench/CMakeLists.txt
+index b1c35ee..c3ed388 100644
+--- a/tools/llama-bench/CMakeLists.txt
++++ b/tools/llama-bench/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-bench-impl)
+ 
+-add_library(${TARGET} llama-bench.cpp)
++add_library(${TARGET} STATIC llama-bench.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-bench executable
+ 
+ set(TARGET llama-bench)
+diff --git a/tools/perplexity/CMakeLists.txt b/tools/perplexity/CMakeLists.txt
+index 0eee9ac..f2c7bfe 100644
+--- a/tools/perplexity/CMakeLists.txt
++++ b/tools/perplexity/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-perplexity-impl)
+ 
+-add_library(${TARGET} perplexity.cpp)
++add_library(${TARGET} STATIC perplexity.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-perplexity executable
+ 
+ set(TARGET llama-perplexity)
+diff --git a/tools/quantize/CMakeLists.txt b/tools/quantize/CMakeLists.txt
+index eead4c8..2299108 100644
+--- a/tools/quantize/CMakeLists.txt
++++ b/tools/quantize/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-quantize-impl)
+ 
+-add_library(${TARGET} quantize.cpp)
++add_library(${TARGET} STATIC quantize.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-quantize executable
+ 
+ set(TARGET llama-quantize)
+diff --git a/tools/server/CMakeLists.txt b/tools/server/CMakeLists.txt
+index 7d42743..a2d73ab 100644
+--- a/tools/server/CMakeLists.txt
++++ b/tools/server/CMakeLists.txt
+@@ -31,7 +31,7 @@ target_link_libraries(${TARGET} PUBLIC llama-common mtmd ${CMAKE_THREAD_LIBS_INI
+ 
+ set(TARGET llama-server-impl)
+ 
+-add_library(${TARGET}
++add_library(${TARGET} STATIC
+     server.cpp
+     server-http.cpp
+     server-http.h
+@@ -44,10 +44,6 @@ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_include_directories(${TARGET} PRIVATE ../mtmd ${CMAKE_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC server-context llama-ui cpp-httplib ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-server executable
+ 
+ set(TARGET llama-server)

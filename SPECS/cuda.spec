@@ -1,5 +1,5 @@
-%global cuda_series 13-2
-%global cuda_version %(echo '%{cuda_series}' | tr '-' '.')
+%global cuda_version 13.3
+%global cuda_series %(echo '%{cuda_version}' | tr '.' '-')
 %global cuda_root /usr/local/cuda-%{cuda_version}
 
 %global debug_package %{nil}
@@ -83,7 +83,7 @@ for pkg in cuda-cudart-%{cuda_series} libcublas-%{cuda_series}; do
     done
 done
 
-for pkg in cuda-cudart-devel-%{cuda_series} cuda-driver-devel-%{cuda_series} cuda-nvcc-%{cuda_series} libcublas-devel-%{cuda_series} cuda-cccl-%{cuda_series} cuda-crt-%{cuda_series} cuda-culibos-devel-%{cuda_series} libnvptxcompiler-%{cuda_series} libnvvm-%{cuda_series}; do
+for pkg in cuda-cudart-devel-%{cuda_series} cuda-driver-devel-%{cuda_series} cuda-nvcc-%{cuda_series} libcublas-devel-%{cuda_series} cccl-%{cuda_series} cuda-crt-%{cuda_series} cuda-culibos-devel-%{cuda_series} libnvptxcompiler-%{cuda_series} libnvvm-%{cuda_series}; do
     for license in /usr/share/licenses/"$pkg"/*; do
         cp -a "$license" "%{buildroot}%{_licensedir}/%{name}-devel/$(basename "$license").${pkg}"
     done
@@ -109,5 +109,8 @@ sh %{SOURCE1} "%{buildroot}" "%{_prefix}" "%{_libdir}" "%{_bindir}" "%{_included
 %{_prefix}/src/*
 
 %changelog
+* Thu May 28 2026 Fxzx micah <48860358+fxzxmicah@users.noreply.github.com> - 13.3-1
+- Update CUDA to 13.3.
+
 * Tue May 05 2026 Fxzx micah <48860358+fxzxmicah@users.noreply.github.com> - 13.2-1
 - Repackage CUDA runtime and development files into standard Fedora paths.
