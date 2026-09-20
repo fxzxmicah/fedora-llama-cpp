@@ -1,8 +1,8 @@
-%global openvino_version 2026.1.0
+%global openvino_version 2026.4.0
 %global openvino_tag %{openvino_version}
-%global ov_onednn_cpu_commit 6b6492b1ea9ef5ca9ff3c5c59ed71dcca683a446
+%global ov_onednn_cpu_commit 1289c3b65dd6a119a5ed12a816517d9c3a21d81b
 %global ov_mlas_commit d1bc25ec4660cddd87804fcf03b2411b5dfb2e94
-%global ov_level_zero_ext_commit 42768cc73e74f6d371bd9dd51b1860b07774e7ec
+%global ov_level_zero_ext_commit b11dc98b48f9f0dbb8c3b44f73b42f295a32097f
 
 %global debug_package %{nil}
 
@@ -42,6 +42,10 @@ inference solutions using deep learning models.
 %package libs
 Summary:    OpenVINO runtime libraries
 
+Requires:   libze_intel_npu.so.1()(64bit)
+Requires:   libopenvino_intel_npu_compiler.so()(64bit)
+Requires:   libze_loader.so.1()(64bit)
+
 %description libs
 The OpenVINO runtime libraries and plugins required to run inference.
 
@@ -76,12 +80,17 @@ mv -T level-zero-npu-extensions-%{ov_level_zero_ext_commit} src/plugins/intel_np
     -DENABLE_AUTO_BATCH=OFF \
     -DENABLE_HETERO=OFF \
     -DENABLE_PROXY=OFF \
+    -DENABLE_DEBUG_CAPS=OFF \
+    -DENABLE_OPENVINO_DEBUG=OFF \
     -DENABLE_PROFILING_ITT=OFF \
     -DENABLE_PROFILING_FIRST_INFERENCE=OFF \
+    -DENABLE_IO_URING=OFF \
     -DENABLE_JS=OFF \
     -DENABLE_INTEL_CPU=ON \
+    -DENABLE_MLAS_FOR_CPU=ON \
     -DENABLE_INTEL_GPU=OFF \
     -DENABLE_INTEL_NPU=ON \
+    -DENABLE_NPU_PLUGIN_ENGINE=ON \
     -DENABLE_INTEL_NPU_INTERNAL=OFF \
     -DENABLE_INTEL_NPU_PROTOPIPE=OFF \
     -DENABLE_INTEL_NPU_COMPILER=OFF \
@@ -89,7 +98,9 @@ mv -T level-zero-npu-extensions-%{ov_level_zero_ext_commit} src/plugins/intel_np
     -DENABLE_PKGCONFIG_GEN=OFF \
     -DENABLE_PYTHON=OFF \
     -DENABLE_PYTHON_PACKAGING=OFF \
+    -DTHREADING=TBB_ADAPTIVE \
     -DENABLE_SYSTEM_TBB=ON \
+    -DENABLE_TBBBIND_2_5=OFF \
     -DENABLE_SYSTEM_PUGIXML=ON \
     -DENABLE_SYSTEM_LEVEL_ZERO=ON \
     -DENABLE_SYSTEM_FLATBUFFERS=ON \
@@ -100,6 +111,7 @@ mv -T level-zero-npu-extensions-%{ov_level_zero_ext_commit} src/plugins/intel_np
     -DENABLE_OV_JAX_FRONTEND=OFF \
     -DENABLE_OV_TF_FRONTEND=OFF \
     -DENABLE_OV_TF_LITE_FRONTEND=OFF \
+    -DENABLE_OV_GGUF_FRONTEND=OFF \
     -DENABLE_WHEEL=OFF
 
 %cmake_build
@@ -110,6 +122,17 @@ mv -T level-zero-npu-extensions-%{ov_level_zero_ext_commit} src/plugins/intel_np
 # clean up
 rm -rf %{buildroot}%{_datadir}/openvino
 rm -rf %{buildroot}%{_datadir}/doc
+
+%check
+plugin_dir=%{buildroot}%{_libdir}/openvino-%{version}
+test -f "${plugin_dir}/plugins.xml"
+test -e "${plugin_dir}/libopenvino_intel_cpu_plugin.so"
+test -e "${plugin_dir}/libopenvino_intel_npu_plugin.so"
+test ! -e "${plugin_dir}/libopenvino_auto_plugin.so"
+test ! -e "${plugin_dir}/libopenvino_auto_batch_plugin.so"
+test ! -e "${plugin_dir}/libopenvino_hetero_plugin.so"
+test ! -e "${plugin_dir}/libopenvino_intel_gpu_plugin.so"
+test ! -e "${plugin_dir}/libopenvino_template_plugin.so"
 
 %files libs
 %license LICENSE
@@ -123,5 +146,9 @@ rm -rf %{buildroot}%{_datadir}/doc
 %{_libdir}/libopenvino*.so
 
 %changelog
+* Sun Sep 20 2026 Fxzx micah <48860358+fxzxmicah@users.noreply.github.com> - 2026.4.0-1
+- Update OpenVINO to 2026.4.0 and refresh bundled dependency revisions.
+- Disable the new GGUF frontend in the runtime-only build.
+
 * Sat May 02 2026 Fxzx micah <48860358+fxzxmicah@users.noreply.github.com> - 2026.1.0-1
 - Init package.

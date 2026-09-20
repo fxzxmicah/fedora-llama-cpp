@@ -1,8 +1,8 @@
 diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
-index 23e40625..285d0173 100644
+index 3a6fcf01..a5c66fd3 100644
 --- a/src/core/CMakeLists.txt
 +++ b/src/core/CMakeLists.txt
-@@ -50,7 +50,10 @@ target_include_directories(openvino_core_dev INTERFACE
+@@ -49,7 +49,10 @@ target_include_directories(openvino_core_dev INTERFACE
      $<BUILD_INTERFACE:${OpenVINO_SOURCE_DIR}/src/common/transformations/include>
      $<BUILD_INTERFACE:${OpenVINO_SOURCE_DIR}/src/common/low_precision_transformations/include>)
  

@@ -1,0 +1,181 @@
+diff --git a/tools/batched-bench/CMakeLists.txt b/tools/batched-bench/CMakeLists.txt
+index f6ed257f5..19c3a45f6 100644
+--- a/tools/batched-bench/CMakeLists.txt
++++ b/tools/batched-bench/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-batched-bench-impl)
+ 
+-add_library(${TARGET} batched-bench.cpp)
++add_library(${TARGET} STATIC batched-bench.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-batched-bench executable
+ 
+ set(TARGET llama-batched-bench)
+diff --git a/tools/cli/CMakeLists.txt b/tools/cli/CMakeLists.txt
+index 8449cdbaf..7935ace5c 100644
+--- a/tools/cli/CMakeLists.txt
++++ b/tools/cli/CMakeLists.txt
+@@ -2,7 +2,7 @@
+ 
+ set(TARGET llama-cli-impl)
+ 
+-add_library(${TARGET} cli.cpp
++add_library(${TARGET} STATIC cli.cpp
+                       cli-client.cpp
+                       cli-context.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+@@ -10,10 +10,6 @@ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ../server)
+ target_link_libraries(${TARGET} PUBLIC llama-server-impl llama-common ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-cli executable
+ 
+ set(TARGET llama-cli)
+diff --git a/tools/completion/CMakeLists.txt b/tools/completion/CMakeLists.txt
+index a310251ef..392e844ef 100644
+--- a/tools/completion/CMakeLists.txt
++++ b/tools/completion/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-completion-impl)
+ 
+-add_library(${TARGET} completion.cpp)
++add_library(${TARGET} STATIC completion.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-completion executable
+ 
+ set(TARGET llama-completion)
+diff --git a/tools/fit-params/CMakeLists.txt b/tools/fit-params/CMakeLists.txt
+index 8acdaef37..91a861b82 100644
+--- a/tools/fit-params/CMakeLists.txt
++++ b/tools/fit-params/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-fit-params-impl)
+ 
+-add_library(${TARGET} fit-params.cpp)
++add_library(${TARGET} STATIC fit-params.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-fit-params executable
+ 
+ set(TARGET llama-fit-params)
+diff --git a/tools/llama-bench/CMakeLists.txt b/tools/llama-bench/CMakeLists.txt
+index b1c35ee88..c3ed388c6 100644
+--- a/tools/llama-bench/CMakeLists.txt
++++ b/tools/llama-bench/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-bench-impl)
+ 
+-add_library(${TARGET} llama-bench.cpp)
++add_library(${TARGET} STATIC llama-bench.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-bench executable
+ 
+ set(TARGET llama-bench)
+diff --git a/tools/perplexity/CMakeLists.txt b/tools/perplexity/CMakeLists.txt
+index 0eee9acd4..f2c7bfe66 100644
+--- a/tools/perplexity/CMakeLists.txt
++++ b/tools/perplexity/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-perplexity-impl)
+ 
+-add_library(${TARGET} perplexity.cpp)
++add_library(${TARGET} STATIC perplexity.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-perplexity executable
+ 
+ set(TARGET llama-perplexity)
+diff --git a/tools/quantize/CMakeLists.txt b/tools/quantize/CMakeLists.txt
+index eead4c859..2299108d9 100644
+--- a/tools/quantize/CMakeLists.txt
++++ b/tools/quantize/CMakeLists.txt
+@@ -2,16 +2,12 @@
+ 
+ set(TARGET llama-quantize-impl)
+ 
+-add_library(${TARGET} quantize.cpp)
++add_library(${TARGET} STATIC quantize.cpp)
+ set_target_properties(${TARGET} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ 
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(${TARGET} PUBLIC llama-common llama ${CMAKE_THREAD_LIBS_INIT})
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-quantize executable
+ 
+ set(TARGET llama-quantize)
+diff --git a/tools/server/CMakeLists.txt b/tools/server/CMakeLists.txt
+index 4adaaceef..59030a6f2 100644
+--- a/tools/server/CMakeLists.txt
++++ b/tools/server/CMakeLists.txt
+@@ -37,7 +37,7 @@ target_link_libraries(${TARGET} PUBLIC llama-common mtmd ${CMAKE_THREAD_LIBS_INI
+ 
+ set(TARGET llama-server-impl)
+ 
+-add_library(${TARGET}
++add_library(${TARGET} STATIC
+     server.cpp
+     server-http.cpp
+     server-http.h
+@@ -52,10 +52,6 @@ target_link_libraries(${TARGET} PUBLIC server-context llama-ui cpp-httplib ${CMA
+ 
+ add_dependencies(${TARGET} llama-ui-assets)
+ 
+-if(LLAMA_TOOLS_INSTALL)
+-    install(TARGETS ${TARGET} LIBRARY)
+-endif()
+-
+ # llama-server executable
+ 
+ set(TARGET llama-server)
+

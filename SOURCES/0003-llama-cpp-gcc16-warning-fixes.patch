@@ -1,8 +1,8 @@
 diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
-index c645d07..b898701 100644
+index 43c396f15..51e5fd61f 100644
 --- a/src/llama-model-loader.cpp
 +++ b/src/llama-model-loader.cpp
-@@ -242,7 +242,8 @@ namespace GGUFMeta {
+@@ -246,7 +246,8 @@ namespace GGUFMeta {
          static typename std::enable_if<std::is_same<OT, std::string>::value, bool>::type
          try_override(T & target, const struct llama_model_kv_override * ovrd) {
              if (validate_override(LLAMA_KV_OVERRIDE_TYPE_STR, ovrd)) {
@@ -13,7 +13,7 @@ index c645d07..b898701 100644
              }
              return false;
 diff --git a/tools/mtmd/clip-graph.h b/tools/mtmd/clip-graph.h
-index 1d9f6a1..8b38d32 100644
+index bbee35bea..3f9aa04f0 100644
 --- a/tools/mtmd/clip-graph.h
 +++ b/tools/mtmd/clip-graph.h
 @@ -9,7 +9,10 @@
@@ -28,8 +28,8 @@ index 1d9f6a1..8b38d32 100644
  
  struct build_vit_opts {
      ggml_tensor * attn_mask = nullptr;
-@@ -57,7 +60,7 @@ struct clip_graph {
-     void cb(ggml_tensor * cur0, const char * name, int il) const;
+@@ -81,7 +84,7 @@ struct clip_graph {
+     }
  
      // siglip2 naflex
 -    ggml_tensor * resize_position_embeddings(uint32_t interpolation_mode = DEFAULT_INTERPOLATION_MODE);
@@ -38,15 +38,16 @@ index 1d9f6a1..8b38d32 100644
      // build vision transformer (ViT) cgraph
      // this function should cover most of the models
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 7bb702b..f49339d 100644
+index 1783c7ddf..a71d5e0d4 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
-@@ -276,7 +276,7 @@ void clip_graph::cb(ggml_tensor * cur, const char * name, int il) const {
+@@ -309,7 +309,7 @@ void clip_graph::cb(ggml_tensor * cur, const char * name, int il) const {
  }
  
  // siglip2 naflex
 -ggml_tensor * clip_graph::resize_position_embeddings(uint32_t interpolation_mode) {
 +ggml_tensor * clip_graph::resize_position_embeddings(ggml_scale_mode interpolation_mode) {
      ggml_tensor * pos_embd = model.position_embeddings;
-     const int height       = img.ny / patch_size;
-     const int width        = img.nx / patch_size;
+     const int height       = img.ny() / patch_size;
+     const int width        = img.nx() / patch_size;
+
