@@ -1,0 +1,44 @@
+diff --git a/src/core/reference/src/op/multiclass_nms.cpp b/src/core/reference/src/op/multiclass_nms.cpp
+index 6e76e78f..beb72068 100644
+--- a/src/core/reference/src/op/multiclass_nms.cpp
++++ b/src/core/reference/src/op/multiclass_nms.cpp
+@@ -70,12 +70,12 @@ std::vector<T> slice_image(const T* data, const Shape& data_shape, const int64_t
+ // nms over a class
+ // boxes:       num_priors, 4
+ // scores:      num_priors, 1
+-static const std::vector<BoxInfo> nms(const float* boxes_data,
+-                                      const float* scoresPtr,
+-                                      const int64_t num_priors,
+-                                      const op::util::MulticlassNmsBase::Attributes& attrs,
+-                                      const size_t image_idx,
+-                                      const size_t class_idx) {
++static std::vector<BoxInfo> nms(const float* boxes_data,
++                                const float* scoresPtr,
++                                const int64_t num_priors,
++                                const op::util::MulticlassNmsBase::Attributes& attrs,
++                                const size_t image_idx,
++                                const size_t class_idx) {
+     auto func = [](float iou, float adaptive_threshold) {
+         return iou <= adaptive_threshold ? 1.0f : 0.0f;
+     };
+@@ -162,13 +162,13 @@ static const std::vector<BoxInfo> nms(const float* boxes_data,
+ // shared           Y               N
+ // boxes:       1, M, 4         C, M', 4
+ // scores:      1, C, M         C, M'
+-static const std::vector<BoxInfo> multiclass_nms(const float* boxes_data,
+-                                                 const Shape& boxes_data_shape,
+-                                                 const float* scores_data,
+-                                                 const Shape& scores_data_shape,
+-                                                 const op::util::MulticlassNmsBase::Attributes& attrs,
+-                                                 const size_t image_idx,
+-                                                 const bool shared) {
++static std::vector<BoxInfo> multiclass_nms(const float* boxes_data,
++                                           const Shape& boxes_data_shape,
++                                           const float* scores_data,
++                                           const Shape& scores_data_shape,
++                                           const op::util::MulticlassNmsBase::Attributes& attrs,
++                                           const size_t image_idx,
++                                           const bool shared) {
+     int64_t num_dets = 0;
+     std::vector<BoxInfo> selected_boxes;  // container for a batch element
+     (void)boxes_data_shape;
