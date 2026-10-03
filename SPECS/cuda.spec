@@ -1,4 +1,4 @@
-%global cuda_version 13.3
+%global cuda_version 13.4
 %global cuda_series %(echo '%{cuda_version}' | tr '.' '-')
 %global cuda_root /usr/local/cuda-%{cuda_version}
 
@@ -109,6 +109,9 @@ sh %{SOURCE1} "%{buildroot}" "%{_prefix}" "%{_libdir}" "%{_bindir}" "%{_included
 %{_prefix}/src/*
 
 %changelog
+* Sun Sep 20 2026 Fxzx micah <48860358+fxzxmicah@users.noreply.github.com> - 13.4-1
+- Update CUDA to 13.4.
+
 * Thu May 28 2026 Fxzx micah <48860358+fxzxmicah@users.noreply.github.com> - 13.3-1
 - Update CUDA to 13.3.
 

@@ -1,0 +1,23 @@
+diff --git a/src/plugins/intel_npu/src/utils/src/vm/CMakeLists.txt b/src/plugins/intel_npu/src/utils/src/vm/CMakeLists.txt
+index 1c0f458c..60d34a60 100644
+--- a/src/plugins/intel_npu/src/utils/src/vm/CMakeLists.txt
++++ b/src/plugins/intel_npu/src/utils/src/vm/CMakeLists.txt
+@@ -27,6 +27,7 @@ target_include_directories(${TARGET_NAME}
+ )
+ 
+ target_link_libraries(${TARGET_NAME} PUBLIC
++    LevelZero::Headers  # provides the header dependency for bundled or system Level Zero
+     LevelZero::NPUExt     # contain ze_graph_ext.h for npu_vm_runtime.hpp
+     openvino::zero_loader # contain level_zero/ze_api.h> for npu_vm_runtime.hpp
+ )
+@@ -34,10 +35,3 @@ target_link_libraries(${TARGET_NAME} PUBLIC
+ if(NOT BUILD_SHARED_LIBS)
+     target_compile_definitions(${TARGET_NAME} PRIVATE OPENVINO_STATIC_LIBRARY)
+ endif()
+-
+-# The include directories above use TARGET_PROPERTY expressions instead of
+-# target_link_libraries, so CMake creates no build-order edge. Level Zero
+-# headers are copied into the build directory by prepare_ze_headers; without
+-# this explicit dependency a parallel build may compile ${TARGET_NAME} before
+-# the headers are copied, causing a missing-header error
+-add_dependencies(${TARGET_NAME} prepare_ze_headers)

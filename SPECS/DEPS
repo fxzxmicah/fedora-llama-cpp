@@ -1,2 +1,5 @@
+base
 cuda
+oneapi-level-zero
 openvino
+openvino-stub-libs
